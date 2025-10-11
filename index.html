@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Eğlence Bakiye Oyunu • Kayıt Zorunlu</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .card { border: 1px solid #ccc; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    input[type="number"], input[type="text"], input[type="password"] { padding: 10px; font-size: 1rem; width: 240px; }
+    button { padding: 10px 14px; font-size: 1rem; cursor: pointer; border-radius: 8px; }
+    .muted { color: #666; font-size: .95rem; }
+    .balance { font-weight: 600; font-size: 1.2rem; }
+    .ok { color: #137a3a; }
+    .err { color: #b00020; }
+    .log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    /* Modal / kaplama */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal {
+      width: 100%; max-width: 520px; background: #fff; color: #111;
+      border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      .modal { background: #1e1e1e; color: #eaeaea; }
+    }
+    .tabs { display:flex; gap:8px; margin-bottom:12px; }
+    .tab { flex:1; padding:10px; text-align:center; border:1px solid #ccc; border-radius:8px; cursor:pointer; }
+    .tab.active { background:#eee; }
+    @media (prefers-color-scheme: dark) {
+      .tab.active { background:#2a2a2a; }
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>AI Fun • Bakiye Oyunu</h1>
+  <p class="muted">Bu siteye giriş için kayıt zorunludur. Tamamen eğlence amaçlı simülasyon, gerçek para yok.</p>
+
+  <!-- Zorunlu kayıt/giriş kaplaması -->
+  <div id="overlay" class="overlay">
+    <div class="modal">
+      <div class="tabs">
+        <div id="tab-register" class="tab active">Kayıt</div>
+        <div id="tab-login" class="tab">Giriş</div>
+      </div>
+
+      <!-- Kayıt formu -->
+      <div id="register-form">
+        <h2>Kayıt ol</h2>
+        <div class="row">
+          <input id="reg-name" type="text" placeholder="İsim" />
+        </div>
+        <div class="row">
+          <input id="reg-pass" type="password" placeholder="Şifre (min 6)" />
+        </div>
+        <div class="row">
+          <input id="reg-pass2" type="password" placeholder="Şifre tekrar" />
+        </div>
+        <div class="row">
+          <button id="btn-register">Kayıt ol</button>
+        </div>
+        <p id="reg-msg" class="muted"></p>
+      </div>
+
+      <!-- Giriş formu -->
+      <div id="login-form" class="hidden">
+        <h2>Giriş yap</h2>
+        <div class="row">
+          <input id="login-name" type="text" placeholder="İsim" />
+        </div>
+        <div class="row">
+          <input id="login-pass" type="password" placeholder="Şifre" />
+        </div>
+        <div class="row">
+          <button id="btn-login">Giriş</button>
+        </div>
+        <p id="login-msg" class="muted"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Oyun alanı -->
+  <div id="app" class="hidden">
+    <div class="card">
+      <div class="row">
+        <div class="balance">Bakiye: <span id="balance">—</span></div>
+        <button id="reset">Sıfırla</button>
+        <span id="who" class="muted" style="margin-left:auto;"></span>
+        <button id="logout">Çıkış</button>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <input id="risk" type="number" min="1" step="1" placeholder="Risk miktarı" />
+        <button id="play">Oyna</button>
+        <button id="auto">Auto x10</button>
+      </div>
+      <p id="msg" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>Geçmiş</h2>
+      <div id="log" class="log muted"></div>
+    </div>
+  </div>
+
+  <script>
+    // Basit depolama (demo): localStorage
+    const KEY_USER = "fun_user_v1";      // {"name": "...", "pass": "...."}
+    const KEY_BAL  = "fun_balance_v1";   // numeric
+    const START_BALANCE = 100000000;
+    const WIN_MULTIPLIER = 6;
+
+    // Elemanlar
+    const $overlay = document.getElementById("overlay");
+    const $app = document.getElementById("app");
+    const $tabReg = document.getElementById("tab-register");
+    const $tabLogin = document.getElementById("tab-login");
+    const $regForm = document.getElementById("register-form");
+    const $loginForm = document.getElementById("login-form");
+    const $regName = document.getElementById("reg-name");
+    const $regPass = document.getElementById("reg-pass");
+    const $regPass2 = document.getElementById("reg-pass2");
+    const $btnRegister = document.getElementById("btn-register");
+    const $regMsg = document.getElementById("reg-msg");
+    const $loginName = document.getElementById("login-name");
+    const $loginPass = document.getElementById("login-pass");
+    const $btnLogin = document.getElementById("btn-login");
+    const $loginMsg = document.getElementById("login-msg");
+
+    const $balance = document.getElementById("balance");
+    const $risk = document.getElementById("risk");
+    const $play = document.getElementById("play");
+    const $auto = document.getElementById("auto");
+    const $reset = document.getElementById("reset");
+    const $msg = document.getElementById("msg");
+    const $log = document.getElementById("log");
+    const $who = document.getElementById("who");
+    const $logout = document.getElementById("logout");
+
+    // Yardımcılar
+    function fmt(n) { return Number(n).toLocaleString("tr-TR"); }
+    function getUser() {
+      const raw = localStorage.getItem(KEY_USER);
+      return raw ? JSON.parse(raw) : null;
+    }
+    function setUser(u) {
+      localStorage.setItem(KEY_USER, JSON.stringify(u));
+    }
+    function clearUser() {
+      localStorage.removeItem(KEY_USER);
+      localStorage.removeItem(KEY_BAL);
+    }
+    function getBalance() {
+      const raw = localStorage.getItem(KEY_BAL);
+      return raw ? parseInt(raw, 10) : START_BALANCE;
+    }
+    function setBalance(b) {
+      localStorage.setItem(KEY_BAL, String(b));
+    }
+    function log(line, ok=false, err=false) {
+      const prefix = ok ? "✓ " : err ? "✗ " : "• ";
+      const ts = new Date().toLocaleTimeString("tr-TR", { hour12: false });
+      $log.textContent = `${prefix}[${ts}] ${line}\n` + $log.textContent;
+    }
+
+    // Sekmeler
+    function showRegister() {
+      $tabReg.classList.add("active"); $tabLogin.classList.remove("active");
+      $regForm.classList.remove("hidden"); $loginForm.classList.add("hidden");
+      $regMsg.textContent = ""; $loginMsg.textContent = "";
+    }
+    function showLogin() {
+      $tabLogin.classList.add("active"); $tabReg.classList.remove("active");
+      $loginForm.classList.remove("hidden"); $regForm.classList.add("hidden");
+      $regMsg.textContent = ""; $loginMsg.textContent = "";
+    }
+    $tabReg.addEventListener("click", showRegister);
+    $tabLogin.addEventListener("click", showLogin);
+
+    // Kayıt validasyonu
+    function validateRegister(name, pass, pass2) {
+      if (!name || name.trim().length < 2) return "İsim en az 2 karakter olmalı.";
+      if (!pass || pass.length < 6) return "Şifre en az 6 karakter olmalı.";
+      if (pass !== pass2) return "Şifre ve tekrar aynı olmalı.";
+      return null;
+    }
+
+    // Basit "hash" (göstermelik, gerçek güvenlik değil)
+    async function hash(text) {
+      const enc = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest("SHA-256", enc);
+      return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, "0")).join("");
+    }
+
+    // Kayıt akışı
+    $btnRegister.addEventListener("click", async () => {
+      const name = $regName.value.trim();
+      const pass = $regPass.value;
+      const pass2 = $regPass2.value;
+      const err = validateRegister(name, pass, pass2);
+      if (err) { $regMsg.textContent = err; $regMsg.className = "muted err"; return; }
+
+      const user = getUser();
+      if (user && user.name === name) {
+        $regMsg.textContent = "Bu isimle kayıt zaten var. Giriş yapabilirsiniz.";
+        $regMsg.className = "muted err";
+        showLogin();
+        $loginName.value = name;
+        return;
+      }
+
+      const hashed = await hash(pass);
+      setUser({ name, pass: hashed });
+      setBalance(START_BALANCE);
+      $regMsg.textContent = "Kayıt başarılı. Giriş yapılıyor…";
+      $regMsg.className = "muted ok";
+      openApp({ name });
+    });
+
+    // Giriş akışı
+    $btnLogin.addEventListener("click", async () => {
+      const name = $loginName.value.trim();
+      const pass = $loginPass.value;
+      const user = getUser();
+      if (!user) { $loginMsg.textContent = "Kayıt bulunamadı. Lütfen önce kayıt olun."; $loginMsg.className = "muted err"; showRegister(); return; }
+      if (user.name !== name) { $loginMsg.textContent = "İsim eşleşmiyor."; $loginMsg.className = "muted err"; return; }
+      const hashed = await hash(pass);
+      if (user.pass !== hashed) { $loginMsg.textContent = "Şifre hatalı."; $loginMsg.className = "muted err"; return; }
+      $loginMsg.textContent = "Giriş başarılı.";
+      $loginMsg.className = "muted ok";
+      openApp(user);
+    });
+
+    // Uygulamayı aç
+    let balance = START_BALANCE;
+    function openApp(user) {
+      balance = getBalance();
+      $who.textContent = `Kullanıcı: ${user.name}`;
+      $balance.textContent = fmt(balance);
+      $overlay.classList.add("hidden");
+      $app.classList.remove("hidden");
+    }
+
+    // Çıkış
+    $logout.addEventListener("click", () => {
+      clearUser();
+      location.reload();
+    });
+
+    // Oyun mekaniği
+    function updateBalance() {
+      $balance.textContent = fmt(balance);
+      setBalance(balance);
+    }
+    function playOnce(risk) {
+      if (!Number.isFinite(risk) || risk <= 0) {
+        $msg.textContent = "Lütfen pozitif bir risk miktarı gir.";
+        $msg.className = "muted err";
+        return;
+      }
+      if (risk > balance) {
+        $msg.textContent = "Hata: Risk miktarı bakiyeden büyük olamaz.";
+        $msg.className = "muted err";
+        log(`Yetersiz bakiye. Risk: ${fmt(risk)} | Bakiye: ${fmt(balance)}`, false, true);
+        return;
+      }
+      const win = Math.random() < 0.5;
+      if (win) {
+        const gain = risk * WIN_MULTIPLIER;
+        balance += gain;
+        updateBalance();
+        $msg.textContent = `Kazandın! Bakiyeye +${fmt(gain)} eklendi. Yeni bakiye: ${fmt(balance)}.`;
+        $msg.className = "muted ok";
+        log(`Cesur hamle! ${fmt(risk)} risk ile ${fmt(gain)} kazanç. Yeni bakiye: ${fmt(balance)}`, true, false);
+      } else {
+        balance -= risk;
+        updateBalance();
+        $msg.textContent = `Kaybettin. Bakiyeden -${fmt(risk)} düştü. Yeni bakiye: ${fmt(balance)}.`;
+        $msg.className = "muted err";
+        log(`Piyasa ters döndü. ${fmt(risk)} kayıp. Yeni bakiye: ${fmt(balance)}`, false, true);
+      }
+    }
+    async function autoPlay(risk) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 150));
+        playOnce(risk);
+        if (balance <= 0) {
+          $msg.textContent = "Bakiye tükendi. Oyunu sıfırlayabilirsin.";
+          $msg.className = "muted err";
+          break;
+        }
+      }
+    }
+
+    // Olaylar
+    $play.addEventListener("click", () => {
+      const risk = parseInt($risk.value, 10);
+      playOnce(risk);
+    });
+    $auto.addEventListener("click", () => {
+      const risk = parseInt($risk.value, 10);
+      autoPlay(risk);
+    });
+    $reset.addEventListener("click", () => {
+      balance = START_BALANCE;
+      updateBalance();
+      $msg.textContent = "Bakiye başlangıç değerine sıfırlandı.";
+      $msg.className = "muted";
+      log("Bakiye sıfırlandı.");
+    });
+
+    // İlk açılış: kayıt mı giriş mi?
+    (function init() {
+      const user = getUser();
+      if (user) {
+        // Kullanıcı varsa giriş sekmesini öne çıkar
+        showLogin();
+        $loginName.value = user.name;
+      } else {
+        showRegister();
+      }
+    })();
+  </script>
+</body>
+</html>
