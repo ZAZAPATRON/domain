@@ -333,3 +333,35 @@
   <pre id="bot-status">Yükleniyor...</pre>
   <script src="bot.js"></script>
 </body>
+<body>
+  <header style="display:flex; justify-content:space-between; align-items:center; padding:12px;">
+    <h1>AI Fun Site</h1>
+    <div id="menu" style="cursor:pointer;">⋮</div>
+  </header>
+
+  <div id="dropdown" style="display:none; position:absolute; right:12px; top:48px; background:#eee; border-radius:8px; padding:8px;">
+    <div id="open-bot" style="padding:6px 12px; cursor:pointer;">Bot</div>
+  </div>
+
+  <div id="bot-panel" style="display:none; padding:16px; border-top:1px solid #ccc;">
+    <h2>Bot Paneli</h2>
+    <textarea id="bot-input" rows="4" style="width:100%;"></textarea>
+    <button id="run-bot">Raporu Gönder</button>
+    <pre id="bot-output" style="margin-top:12px;"></pre>
+  </div>
+
+  <script src="bot.js"></script>
+  <script>
+    // Menü aç/kapa
+    document.getElementById("menu").onclick = () => {
+      const dd = document.getElementById("dropdown");
+      dd.style.display = dd.style.display === "none" ? "block" : "none";
+    };
+
+    // Bot panelini aç
+    document.getElementById("open-bot").onclick = () => {
+      document.getElementById("bot-panel").style.display = "block";
+      document.getElementById("dropdown").style.display = "none";
+    };
+  </script>
+</body>
